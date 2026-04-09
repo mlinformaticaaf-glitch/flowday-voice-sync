@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, type PointerEvent as ReactPointerEvent } from 'react';
 import { Mic } from 'lucide-react';
 import { runVoicePipeline, playAudioBase64, LLMAction } from '@/lib/voicePipeline';
 import { useAppStore } from '@/stores/useAppStore';
@@ -64,11 +64,17 @@ export default function MicButton() {
     [addTask, addAppointment, addInboxItem]
   );
 
-  const startRecording = async () => {
+  const startRecording = async (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (recording || processing) return;
 
     pointerDownRef.current = true;
     discardRecordingRef.current = false;
+
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // noop
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -84,9 +90,9 @@ export default function MicButton() {
         : new MediaRecorder(stream);
 
       chunksRef.current = [];
-      mr.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
+      mr.ondataavailable = (evt) => {
+        if (evt.data.size > 0) {
+          chunksRef.current.push(evt.data);
         }
       };
       mr.onstop = async () => {
@@ -134,8 +140,18 @@ export default function MicButton() {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (event?: ReactPointerEvent<HTMLButtonElement>) => {
     pointerDownRef.current = false;
+
+    if (event) {
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // noop
+      }
+    }
 
     if (!mediaRef.current || mediaRef.current.state !== 'recording') return;
 
@@ -148,7 +164,6 @@ export default function MicButton() {
     <button
       onPointerDown={startRecording}
       onPointerUp={stopRecording}
-      onPointerLeave={stopRecording}
       onPointerCancel={stopRecording}
       disabled={processing}
       className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${

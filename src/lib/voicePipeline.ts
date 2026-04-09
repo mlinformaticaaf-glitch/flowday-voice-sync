@@ -57,7 +57,7 @@ export async function runVoicePipeline(audioBlob: Blob): Promise<PipelineResult>
 
   if (error) throw new Error(error.message || 'Erro na pipeline de voz');
   if (!data) throw new Error('Resposta vazia do pipeline de voz.');
-  if (!data.ok) throw new Error(data.error);
+  if ('error' in data) throw new Error(data.error);
 
   return data;
 }
