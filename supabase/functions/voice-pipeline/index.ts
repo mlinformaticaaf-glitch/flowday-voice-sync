@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY")
-    const GOOGLE_TTS_KEY = Deno.env.get("GOOGLE_TTS_API_KEY")
+    const GOOGLE_TTS_KEY = Deno.env.get("GOOGLE_TTS_API_KEY") || Deno.env.get("GOOGLE_TTS_KEY")
 
     if (!GROQ_API_KEY) {
       throw new Error("GROQ_API_KEY não configurada nos Secrets")
