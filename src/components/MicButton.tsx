@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, type PointerEvent as ReactPointerEvent } from 'react';
 import { Mic } from 'lucide-react';
 import { runVoicePipeline, playAudioBase64, LLMAction } from '@/lib/voicePipeline';
 import { useAppStore } from '@/stores/useAppStore';
@@ -13,15 +13,14 @@ const SUPPORTED_RECORDING_MIME_TYPES = [
 ] as const;
 
 const MIN_AUDIO_BYTES = 1024;
+const MIN_RECORDING_MS = 900;
 
 function getPreferredRecordingMimeType() {
   if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
     return undefined;
   }
 
-  return SUPPORTED_RECORDING_MIME_TYPES.find((mimeType) =>
-    MediaRecorder.isTypeSupported(mimeType)
-  );
+  return SUPPORTED_RECORDING_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType));
 }
 
 export default function MicButton() {
@@ -29,6 +28,9 @@ export default function MicButton() {
   const [processing, setProcessing] = useState(false);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const pointerDownRef = useRef(false);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const discardRecordingRef = useRef(false);
 
   const { addTask, addAppointment, addInboxItem } = useAppStore();
 
@@ -62,35 +64,56 @@ export default function MicButton() {
     [addTask, addAppointment, addInboxItem]
   );
 
-  const startRecording = async () => {
+  const startRecording = async (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (recording || processing) return;
+
+    pointerDownRef.current = true;
+    discardRecordingRef.current = false;
+
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // noop
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      if (!pointerDownRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
       const preferredMimeType = getPreferredRecordingMimeType();
       const mr = preferredMimeType
         ? new MediaRecorder(stream, { mimeType: preferredMimeType })
         : new MediaRecorder(stream);
 
       chunksRef.current = [];
-      mr.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
+      mr.ondataavailable = (evt) => {
+        if (evt.data.size > 0) {
+          chunksRef.current.push(evt.data);
         }
       };
       mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
+        stream.getTracks().forEach((track) => track.stop());
         mediaRef.current = null;
+        setRecording(false);
+
+        const recordedMs = recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : 0;
+        recordingStartedAtRef.current = null;
 
         const blob = new Blob(chunksRef.current, {
           type: chunksRef.current[0]?.type || mr.mimeType || preferredMimeType || 'audio/webm',
         });
 
-        if (blob.size < MIN_AUDIO_BYTES) {
-          toast.error('Áudio muito curto. Segure o botão e fale antes de soltar.');
+        if (discardRecordingRef.current || recordedMs < MIN_RECORDING_MS || blob.size < MIN_AUDIO_BYTES) {
+          discardRecordingRef.current = false;
+          toast.error('Segure o botão por mais tempo e fale antes de soltar.');
           return;
         }
 
+        discardRecordingRef.current = false;
         setProcessing(true);
         try {
           const result = await runVoicePipeline(blob);
@@ -106,26 +129,42 @@ export default function MicButton() {
           setProcessing(false);
         }
       };
+
       mr.start(250);
       mediaRef.current = mr;
+      recordingStartedAtRef.current = Date.now();
       setRecording(true);
     } catch {
+      pointerDownRef.current = false;
       toast.error('Não foi possível acessar o microfone');
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (event?: ReactPointerEvent<HTMLButtonElement>) => {
+    pointerDownRef.current = false;
+
+    if (event) {
+      try {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // noop
+      }
+    }
+
     if (!mediaRef.current || mediaRef.current.state !== 'recording') return;
 
+    const startedAt = recordingStartedAtRef.current;
+    discardRecordingRef.current = !startedAt || Date.now() - startedAt < MIN_RECORDING_MS;
     mediaRef.current.stop();
-    setRecording(false);
   };
 
   return (
     <button
       onPointerDown={startRecording}
       onPointerUp={stopRecording}
-      onPointerLeave={stopRecording}
+      onPointerCancel={stopRecording}
       disabled={processing}
       className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
         recording

@@ -27,11 +27,21 @@ export interface LLMAction {
 }
 
 export interface PipelineResult {
+  ok: true;
   transcript: string;
   action: LLMAction;
   confirmacao: string;
-  audio: string; // base64 MP3
+  audio: string | null;
 }
+
+interface PipelineErrorResult {
+  ok: false;
+  error: string;
+  code?: string;
+  retryable?: boolean;
+}
+
+type PipelineResponse = PipelineResult | PipelineErrorResult;
 
 export async function runVoicePipeline(audioBlob: Blob): Promise<PipelineResult> {
   if (audioBlob.size === 0) {
@@ -41,13 +51,15 @@ export async function runVoicePipeline(audioBlob: Blob): Promise<PipelineResult>
   const formData = new FormData();
   formData.append('audio', audioBlob, getAudioFileName(audioBlob));
 
-  const { data, error } = await supabase.functions.invoke('voice-pipeline', {
+  const { data, error } = await supabase.functions.invoke<PipelineResponse>('voice-pipeline', {
     body: formData,
   });
 
   if (error) throw new Error(error.message || 'Erro na pipeline de voz');
-  if (data?.error) throw new Error(data.error);
-  return data as PipelineResult;
+  if (!data) throw new Error('Resposta vazia do pipeline de voz.');
+  if ('error' in data) throw new Error(data.error);
+
+  return data;
 }
 
 export function playAudioBase64(base64Mp3: string): void {
@@ -56,10 +68,15 @@ export function playAudioBase64(base64Mp3: string): void {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
   const audioCtx = new AudioContext();
-  audioCtx.decodeAudioData(bytes.buffer).then((buffer) => {
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioCtx.destination);
-    source.start();
-  });
+  audioCtx
+    .decodeAudioData(bytes.buffer)
+    .then((buffer) => {
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start();
+    })
+    .catch(() => {
+      void audioCtx.close();
+    });
 }
