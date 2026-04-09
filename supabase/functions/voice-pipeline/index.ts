@@ -8,6 +8,13 @@ const corsHeaders = {
 
 const MIN_AUDIO_BYTES = 1024
 
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  })
+}
+
 function getAudioExtension(mimeType?: string | null) {
   const normalized = mimeType?.split(";")[0].trim().toLowerCase()
 
@@ -35,6 +42,42 @@ function getAudioFilename(file: File) {
   return `audio.${getAudioExtension(file.type)}`
 }
 
+function getFriendlyError(message: string) {
+  if (message.includes("Audio file is too short") || message.includes("Áudio muito curto")) {
+    return {
+      ok: false as const,
+      code: "audio_too_short",
+      retryable: true,
+      error: "Segure o botão por mais tempo e fale antes de soltar.",
+    }
+  }
+
+  if (message.includes("could not process file")) {
+    return {
+      ok: false as const,
+      code: "invalid_audio",
+      retryable: true,
+      error: "Não consegui processar esse áudio. Tente novamente falando por mais tempo.",
+    }
+  }
+
+  if (message.includes("Transcrição vazia")) {
+    return {
+      ok: false as const,
+      code: "empty_transcript",
+      retryable: true,
+      error: "Não consegui transcrever sua fala. Tente novamente em um lugar mais silencioso.",
+    }
+  }
+
+  return {
+    ok: false as const,
+    code: "pipeline_failed",
+    retryable: false,
+    error: message || "Erro interno desconhecido",
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -47,9 +90,6 @@ serve(async (req) => {
     if (!GROQ_API_KEY) {
       throw new Error("GROQ_API_KEY não configurada nos Secrets")
     }
-    if (!GOOGLE_TTS_KEY) {
-      throw new Error("GOOGLE_TTS_API_KEY não configurada nos Secrets")
-    }
 
     const formData = await req.formData()
     const audioFile = formData.get("audio")
@@ -59,7 +99,12 @@ serve(async (req) => {
     }
 
     if (audioFile.size < MIN_AUDIO_BYTES) {
-      throw new Error("Áudio muito curto — segure o botão e fale antes de soltar")
+      return jsonResponse({
+        ok: false,
+        code: "audio_too_short",
+        retryable: true,
+        error: "Segure o botão por mais tempo e fale antes de soltar.",
+      })
     }
 
     const sttForm = new FormData()
@@ -137,59 +182,48 @@ serve(async (req) => {
     }
 
     const confirmacao = parsed.confirmacao ?? "Ação registrada."
+    let audioContent: string | null = null
 
-    const ttsRes = await fetch(
-      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input: { text: confirmacao },
-          voice: {
-            languageCode: "pt-BR",
-            name: "pt-BR-Wavenet-B",
-            ssmlGender: "MALE",
-          },
-          audioConfig: {
-            audioEncoding: "MP3",
-            speakingRate: 1.0,
-            pitch: -2.0,
-          },
-        }),
+    if (GOOGLE_TTS_KEY) {
+      const ttsRes = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: { text: confirmacao },
+            voice: {
+              languageCode: "pt-BR",
+              name: "pt-BR-Wavenet-B",
+              ssmlGender: "MALE",
+            },
+            audioConfig: {
+              audioEncoding: "MP3",
+              speakingRate: 1.0,
+              pitch: -2.0,
+            },
+          }),
+        }
+      )
+
+      if (ttsRes.ok) {
+        const ttsData = await ttsRes.json()
+        audioContent = ttsData.audioContent ?? null
+      } else {
+        console.error(`Google TTS falhou (${ttsRes.status}): ${await ttsRes.text()}`)
       }
-    )
-
-    if (!ttsRes.ok) {
-      const err = await ttsRes.text()
-      throw new Error(`Google TTS falhou (${ttsRes.status}): ${err}`)
     }
 
-    const ttsData = await ttsRes.json()
-    const audioContent = ttsData.audioContent
-
-    if (!audioContent) {
-      throw new Error("Google TTS não retornou áudio")
-    }
-
-    return new Response(
-      JSON.stringify({
-        transcript,
-        action: parsed,
-        confirmacao,
-        audio: audioContent,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    )
+    return jsonResponse({
+      ok: true,
+      transcript,
+      action: parsed,
+      confirmacao,
+      audio: audioContent,
+    })
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro interno desconhecido"
     console.error("Voice pipeline error:", error)
-    return new Response(
-      JSON.stringify({ error: error.message ?? "Erro interno desconhecido" }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    )
+    return jsonResponse(getFriendlyError(message))
   }
 })
