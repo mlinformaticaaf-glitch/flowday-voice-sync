@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Mic } from 'lucide-react';
-import { speechToText, processCommand, textToSpeech, LLMAction } from '@/lib/voicePipeline';
+import { runVoicePipeline, playAudioBase64, LLMAction } from '@/lib/voicePipeline';
 import { useAppStore } from '@/stores/useAppStore';
 import { toast } from 'sonner';
 
@@ -50,15 +50,16 @@ export default function MicButton() {
       mr.ondataavailable = (e) => chunksRef.current.push(e.data);
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
         setProcessing(true);
         try {
-          const text = await speechToText(blob);
-          toast.info(`Transcrito: "${text}"`);
-          const action = await processCommand(text);
-          executeAction(action);
-          await textToSpeech(action.confirmacao);
-          toast.success(action.confirmacao);
+          const result = await runVoicePipeline(blob);
+          toast.info(`Transcrito: "${result.transcript}"`);
+          executeAction(result.action);
+          toast.success(result.confirmacao);
+          if (result.audio) {
+            playAudioBase64(result.audio);
+          }
         } catch (err: any) {
           toast.error(err.message || 'Erro no pipeline de voz');
         } finally {
