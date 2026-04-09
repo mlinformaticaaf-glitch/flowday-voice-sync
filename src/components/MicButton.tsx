@@ -4,6 +4,26 @@ import { runVoicePipeline, playAudioBase64, LLMAction } from '@/lib/voicePipelin
 import { useAppStore } from '@/stores/useAppStore';
 import { toast } from 'sonner';
 
+const SUPPORTED_RECORDING_MIME_TYPES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/mp4',
+  'audio/ogg;codecs=opus',
+  'audio/ogg',
+] as const;
+
+const MIN_AUDIO_BYTES = 1024;
+
+function getPreferredRecordingMimeType() {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+    return undefined;
+  }
+
+  return SUPPORTED_RECORDING_MIME_TYPES.find((mimeType) =>
+    MediaRecorder.isTypeSupported(mimeType)
+  );
+}
+
 export default function MicButton() {
   const [recording, setRecording] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -43,14 +63,34 @@ export default function MicButton() {
   );
 
   const startRecording = async () => {
+    if (recording || processing) return;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      const preferredMimeType = getPreferredRecordingMimeType();
+      const mr = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
+
       chunksRef.current = [];
-      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm;codecs=opus' });
+        mediaRef.current = null;
+
+        const blob = new Blob(chunksRef.current, {
+          type: chunksRef.current[0]?.type || mr.mimeType || preferredMimeType || 'audio/webm',
+        });
+
+        if (blob.size < MIN_AUDIO_BYTES) {
+          toast.error('Áudio muito curto. Segure o botão e fale antes de soltar.');
+          return;
+        }
+
         setProcessing(true);
         try {
           const result = await runVoicePipeline(blob);
@@ -66,7 +106,7 @@ export default function MicButton() {
           setProcessing(false);
         }
       };
-      mr.start();
+      mr.start(250);
       mediaRef.current = mr;
       setRecording(true);
     } catch {
@@ -75,7 +115,9 @@ export default function MicButton() {
   };
 
   const stopRecording = () => {
-    mediaRef.current?.stop();
+    if (!mediaRef.current || mediaRef.current.state !== 'recording') return;
+
+    mediaRef.current.stop();
     setRecording(false);
   };
 
@@ -89,8 +131,8 @@ export default function MicButton() {
         recording
           ? 'bg-destructive animate-pulse-recording'
           : processing
-          ? 'bg-muted cursor-wait'
-          : 'bg-primary hover:bg-primary/90'
+            ? 'bg-muted cursor-wait'
+            : 'bg-primary hover:bg-primary/90'
       }`}
       aria-label="Gravar comando de voz"
     >

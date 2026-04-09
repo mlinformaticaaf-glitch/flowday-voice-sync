@@ -1,5 +1,21 @@
 import { supabase } from '@/integrations/supabase/client';
 
+const MIME_TYPE_TO_EXTENSION: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/mp4': 'm4a',
+  'video/mp4': 'm4a',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/ogg': 'ogg',
+};
+
+function getAudioFileName(audioBlob: Blob): string {
+  const normalizedMimeType = audioBlob.type.split(';')[0]?.trim().toLowerCase();
+  const extension = MIME_TYPE_TO_EXTENSION[normalizedMimeType] ?? 'webm';
+  return `audio.${extension}`;
+}
+
 export interface LLMAction {
   acao: 'criar_tarefa' | 'criar_compromisso' | 'listar_dia' | 'listar_tarefas' | 'inbox' | 'desconhecido';
   titulo: string;
@@ -18,8 +34,12 @@ export interface PipelineResult {
 }
 
 export async function runVoicePipeline(audioBlob: Blob): Promise<PipelineResult> {
+  if (audioBlob.size === 0) {
+    throw new Error('Áudio vazio. Tente gravar novamente.');
+  }
+
   const formData = new FormData();
-  formData.append('audio', audioBlob, 'audio.webm');
+  formData.append('audio', audioBlob, getAudioFileName(audioBlob));
 
   const { data, error } = await supabase.functions.invoke('voice-pipeline', {
     body: formData,
