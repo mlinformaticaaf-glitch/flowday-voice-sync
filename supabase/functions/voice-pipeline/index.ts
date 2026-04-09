@@ -1,4 +1,7 @@
-import { corsHeaders } from '@supabase/supabase-js/cors'
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 const GROQ_KEY = Deno.env.get('GROQ_API_KEY')!;
 const TTS_KEY = Deno.env.get('GOOGLE_TTS_API_KEY');
