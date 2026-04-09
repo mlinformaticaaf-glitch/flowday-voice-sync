@@ -6,6 +6,35 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 }
 
+const MIN_AUDIO_BYTES = 1024
+
+function getAudioExtension(mimeType?: string | null) {
+  const normalized = mimeType?.split(";")[0].trim().toLowerCase()
+
+  switch (normalized) {
+    case "audio/mp4":
+    case "video/mp4":
+      return "m4a"
+    case "audio/mpeg":
+      return "mp3"
+    case "audio/wav":
+    case "audio/x-wav":
+      return "wav"
+    case "audio/ogg":
+      return "ogg"
+    default:
+      return "webm"
+  }
+}
+
+function getAudioFilename(file: File) {
+  if (file.name && file.name.includes(".")) {
+    return file.name
+  }
+
+  return `audio.${getAudioExtension(file.type)}`
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
@@ -29,9 +58,12 @@ serve(async (req) => {
       throw new Error("Campo 'audio' ausente ou inválido no FormData")
     }
 
-    // ── ETAPA 1: STT — Groq Whisper ──────────────────────────────
+    if (audioFile.size < MIN_AUDIO_BYTES) {
+      throw new Error("Áudio muito curto — segure o botão e fale antes de soltar")
+    }
+
     const sttForm = new FormData()
-    sttForm.append("file", audioFile, "audio.webm")
+    sttForm.append("file", audioFile, getAudioFilename(audioFile))
     sttForm.append("model", "whisper-large-v3")
     sttForm.append("language", "pt")
     sttForm.append("response_format", "json")
@@ -57,7 +89,6 @@ serve(async (req) => {
       throw new Error("Transcrição vazia — áudio não reconhecido")
     }
 
-    // ── ETAPA 2: LLM — Groq Llama 3.3 70B ───────────────────────
     const systemPrompt = `Você é o FlowDay, assistente de produtividade pessoal. Fale sempre em português do Brasil, tom direto e profissional. Ao receber um comando, retorne SOMENTE JSON válido sem markdown e sem explicações:
 {
   "acao": "criar_tarefa" | "criar_compromisso" | "listar_dia" | "listar_tarefas" | "inbox" | "desconhecido",
@@ -107,7 +138,6 @@ serve(async (req) => {
 
     const confirmacao = parsed.confirmacao ?? "Ação registrada."
 
-    // ── ETAPA 3: TTS — Google Cloud WaveNet ──────────────────────
     const ttsRes = await fetch(
       `https://texttospeech.googleapis.com/v1/text:synthesize?key=${GOOGLE_TTS_KEY}`,
       {
