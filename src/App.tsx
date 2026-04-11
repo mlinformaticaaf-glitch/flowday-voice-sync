@@ -1,30 +1,43 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { ThemeProvider, useTheme } from "next-themes";
 import Layout from "./components/Layout";
-import Index from "./pages/Index";
-import InboxPage from "./pages/InboxPage";
-import TasksPage from "./pages/TasksPage";
-import AgendaPage from "./pages/AgendaPage";
-import HabitsPage from "./pages/HabitsPage";
-import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
-import ProjectsPage from "./pages/ProjectsPage";
-import SettingsPage from "./pages/SettingsPage";
 
-const queryClient = new QueryClient();
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const Index = lazy(() => import("./pages/Index"));
+const InboxPage = lazy(() => import("./pages/InboxPage"));
+const TasksPage = lazy(() => import("./pages/TasksPage"));
+const AgendaPage = lazy(() => import("./pages/AgendaPage"));
+const HabitsPage = lazy(() => import("./pages/HabitsPage"));
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 10,
+      retry: 1,
+    },
+  },
+});
+
+function PageSpinner() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <PageSpinner />;
   if (!session) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
@@ -50,16 +63,28 @@ const AppRoutes = () => (
   </Routes>
 );
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
+function AppContent() {
+  const { resolvedTheme } = useTheme();
+
+  return (
     <TooltipProvider>
-      <Sonner theme="dark" />
+      <Sonner theme={resolvedTheme as "light" | "dark"} />
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <Suspense fallback={<PageSpinner />}>
+            <AppRoutes />
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
+  );
+}
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <AppContent />
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

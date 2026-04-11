@@ -1,6 +1,6 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Inbox, CheckSquare, Calendar, Settings, LogOut, Menu, Flame, FolderKanban } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckSquare, Calendar, Settings, LogOut, Menu, Flame, FolderKanban, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppStore } from '@/stores/useAppStore';
 import MicButton from './MicButton';
@@ -31,6 +31,17 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   const displayName = profile?.display_name || user?.email?.split('@')[0] || '';
   const avatarUrl = profile?.avatar_url;
+  const safeAvatarUrl = useMemo(() => {
+    if (!avatarUrl) return null;
+
+    try {
+      const url = new URL(avatarUrl);
+      if (!['https:', 'http:'].includes(url.protocol)) return null;
+      return avatarUrl;
+    } catch {
+      return null;
+    }
+  }, [avatarUrl]);
 
   useEffect(() => {
     let active = true;
@@ -91,8 +102,8 @@ export default function Layout({ children }: { children: ReactNode }) {
         {/* User section */}
         <div className="border-t border-border pt-3 space-y-2">
           <div className="flex items-center gap-2 px-2">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="w-7 h-7 rounded-full" />
+            {safeAvatarUrl ? (
+              <img src={safeAvatarUrl} alt="" referrerPolicy="no-referrer" className="w-7 h-7 rounded-full" />
             ) : (
               <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
                 {displayName.charAt(0).toUpperCase()}
@@ -114,7 +125,13 @@ export default function Layout({ children }: { children: ReactNode }) {
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-card border-b border-border px-4 h-12">
         <h1 className="text-base font-bold text-primary">FlowDay</h1>
         <div className="flex items-center gap-3">
-          {avatarUrl && <img src={avatarUrl} alt="" className="w-6 h-6 rounded-full" />}
+          {safeAvatarUrl ? (
+            <img src={safeAvatarUrl} alt="" referrerPolicy="no-referrer" className="w-6 h-6 rounded-full" />
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+          )}
         </div>
       </div>
 
@@ -132,7 +149,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 <p className="text-xs text-muted-foreground">Acesso rápido ao restante do aplicativo.</p>
               </div>
               <button onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-foreground">
-                <Menu size={18} />
+                <X size={18} />
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">

@@ -1,4 +1,11 @@
+// @ts-ignore - Remote Deno URL imports are resolved at runtime by Supabase Edge.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+
+declare const Deno: {
+  env: {
+    get: (name: string) => string | undefined
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
