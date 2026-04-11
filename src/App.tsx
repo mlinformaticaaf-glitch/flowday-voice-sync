@@ -8,8 +8,11 @@ import Index from "./pages/Index";
 import InboxPage from "./pages/InboxPage";
 import TasksPage from "./pages/TasksPage";
 import AgendaPage from "./pages/AgendaPage";
+import HabitsPage from "./pages/HabitsPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
+import ProjectsPage from "./pages/ProjectsPage";
+import SettingsPage from "./pages/SettingsPage";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +43,9 @@ const AppRoutes = () => (
     <Route path="/inbox" element={<ProtectedRoute><Layout><InboxPage /></Layout></ProtectedRoute>} />
     <Route path="/tarefas" element={<ProtectedRoute><Layout><TasksPage /></Layout></ProtectedRoute>} />
     <Route path="/agenda" element={<ProtectedRoute><Layout><AgendaPage /></Layout></ProtectedRoute>} />
+    <Route path="/habitos" element={<ProtectedRoute><Layout><HabitsPage /></Layout></ProtectedRoute>} />
+    <Route path="/projetos" element={<ProtectedRoute><Layout><ProjectsPage /></Layout></ProtectedRoute>} />
+    <Route path="/configuracoes" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

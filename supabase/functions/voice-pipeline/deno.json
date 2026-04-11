@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.worker"],
+    "types": ["https://deno.land/x/types/index.d.ts"]
+  },
+  "imports": {
+    "https://deno.land/std@0.168.0/http/server.ts": "https://deno.land/std@0.168.0/http/server.ts"
+  }
+}

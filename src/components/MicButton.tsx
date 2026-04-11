@@ -35,27 +35,43 @@ export default function MicButton() {
   const { addTask, addAppointment, addInboxItem } = useAppStore();
 
   const executeAction = useCallback(
-    (action: LLMAction) => {
+    async (action: LLMAction) => {
       const today = new Date().toISOString().split('T')[0];
       switch (action.acao) {
         case 'criar_tarefa':
-          addTask({
+          await addTask({
             title: action.titulo,
             priority: action.prioridade,
             category: action.categoria,
+            kind: 'task',
+            recurrence: action.recorrencia,
             dueDate: action.data || today,
+            source: 'voice',
+          });
+          break;
+        case 'criar_habito':
+          await addTask({
+            title: action.titulo,
+            priority: action.prioridade,
+            category: action.categoria,
+            kind: 'habit',
+            recurrence: action.recorrencia === 'none' ? 'daily' : action.recorrencia,
+            dueDate: action.data || today,
+            source: 'voice',
           });
           break;
         case 'criar_compromisso':
-          addAppointment({
+          await addAppointment({
             title: action.titulo,
             date: action.data || today,
             time: action.hora || '09:00',
             duration: 60,
+            recurrence: action.recorrencia,
+            source: 'voice',
           });
           break;
         case 'inbox':
-          addInboxItem(action.titulo);
+          await addInboxItem(action.titulo, 'voice');
           break;
         default:
           break;
@@ -118,7 +134,7 @@ export default function MicButton() {
         try {
           const result = await runVoicePipeline(blob);
           toast.info(`Transcrito: "${result.transcript}"`);
-          executeAction(result.action);
+          await executeAction(result.action);
           toast.success(result.confirmacao);
           if (result.audio) {
             playAudioBase64(result.audio);
@@ -166,7 +182,7 @@ export default function MicButton() {
       onPointerUp={stopRecording}
       onPointerCancel={stopRecording}
       disabled={processing}
-      className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
+      className={`fixed bottom-24 lg:bottom-6 right-4 lg:right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
         recording
           ? 'bg-destructive animate-pulse-recording'
           : processing

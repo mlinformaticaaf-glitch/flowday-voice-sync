@@ -14,6 +14,147 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointments: {
+        Row: {
+          created_at: string
+          date: string
+          duration: number
+          external_id: string | null
+          id: string
+          recurrence: Database["public"]["Enums"]["recurrence_pattern"]
+          source: Database["public"]["Enums"]["sync_source"]
+          time: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          duration?: number
+          external_id?: string | null
+          id?: string
+          recurrence?: Database["public"]["Enums"]["recurrence_pattern"]
+          source?: Database["public"]["Enums"]["sync_source"]
+          time: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          duration?: number
+          external_id?: string | null
+          id?: string
+          recurrence?: Database["public"]["Enums"]["recurrence_pattern"]
+          source?: Database["public"]["Enums"]["sync_source"]
+          time?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      habit_entries: {
+        Row: {
+          created_at: string
+          entry_date: string
+          habit_id: string
+          id: string
+          user_id: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          entry_date: string
+          habit_id: string
+          id?: string
+          user_id: string
+          value?: number
+        }
+        Update: {
+          created_at?: string
+          entry_date?: string
+          habit_id?: string
+          id?: string
+          user_id?: string
+          value?: number
+        }
+        Relationships: []
+      }
+      google_integrations: {
+        Row: {
+          access_token: string | null
+          connected: boolean
+          created_at: string
+          email: string | null
+          id: string
+          last_calendar_sync_at: string | null
+          last_tasks_sync_at: string | null
+          refresh_token: string | null
+          scope: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          connected?: boolean
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_calendar_sync_at?: string | null
+          last_tasks_sync_at?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          connected?: boolean
+          created_at?: string
+          email?: string | null
+          id?: string
+          last_calendar_sync_at?: string | null
+          last_tasks_sync_at?: string | null
+          refresh_token?: string | null
+          scope?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      inbox_items: {
+        Row: {
+          created_at: string
+          id: string
+          source: Database["public"]["Enums"]["sync_source"]
+          text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          source?: Database["public"]["Enums"]["sync_source"]
+          text: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          source?: Database["public"]["Enums"]["sync_source"]
+          text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -41,6 +182,93 @@ export type Database = {
         }
         Relationships: []
       }
+      projects: {
+        Row: {
+          created_at: string
+          description: string | null
+          due_date: string | null
+          id: string
+          name: string
+          progress: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          name: string
+          progress?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          name?: string
+          progress?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          category: string
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          due_date: string | null
+          external_id: string | null
+          id: string
+          kind: Database["public"]["Enums"]["task_kind"]
+          priority: string
+          recurrence: Database["public"]["Enums"]["recurrence_pattern"]
+          source: Database["public"]["Enums"]["sync_source"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          external_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["task_kind"]
+          priority?: string
+          recurrence?: Database["public"]["Enums"]["recurrence_pattern"]
+          source?: Database["public"]["Enums"]["sync_source"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          external_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["task_kind"]
+          priority?: string
+          recurrence?: Database["public"]["Enums"]["recurrence_pattern"]
+          source?: Database["public"]["Enums"]["sync_source"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -49,7 +277,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      recurrence_pattern: "daily" | "monthly" | "none" | "weekly"
+      sync_source: "google" | "manual" | "voice"
+      task_kind: "habit" | "task"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -176,6 +406,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      recurrence_pattern: ["daily", "monthly", "none", "weekly"],
+      sync_source: ["google", "manual", "voice"],
+      task_kind: ["habit", "task"],
+    },
   },
 } as const

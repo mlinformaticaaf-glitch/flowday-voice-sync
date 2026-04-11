@@ -17,12 +17,13 @@ function getAudioFileName(audioBlob: Blob): string {
 }
 
 export interface LLMAction {
-  acao: 'criar_tarefa' | 'criar_compromisso' | 'listar_dia' | 'listar_tarefas' | 'inbox' | 'desconhecido';
+  acao: 'criar_tarefa' | 'criar_habito' | 'criar_compromisso' | 'listar_dia' | 'listar_tarefas' | 'inbox' | 'desconhecido';
   titulo: string;
   data: string | null;
   hora: string | null;
   prioridade: 'alta' | 'media' | 'baixa';
   categoria: 'codigo' | 'comunicacao' | 'pesquisa' | 'geral';
+  recorrencia: 'none' | 'daily' | 'weekly' | 'monthly';
   confirmacao: string;
 }
 

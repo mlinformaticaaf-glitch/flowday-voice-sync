@@ -78,7 +78,7 @@ function getFriendlyError(message: string) {
   }
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -136,12 +136,13 @@ serve(async (req) => {
 
     const systemPrompt = `Você é o FlowDay, assistente de produtividade pessoal. Fale sempre em português do Brasil, tom direto e profissional. Ao receber um comando, retorne SOMENTE JSON válido sem markdown e sem explicações:
 {
-  "acao": "criar_tarefa" | "criar_compromisso" | "listar_dia" | "listar_tarefas" | "inbox" | "desconhecido",
+  "acao": "criar_tarefa" | "criar_habito" | "criar_compromisso" | "listar_dia" | "listar_tarefas" | "inbox" | "desconhecido",
   "titulo": "texto do item ou null",
   "data": "YYYY-MM-DD ou null",
   "hora": "HH:MM ou null",
   "prioridade": "alta" | "media" | "baixa",
   "categoria": "codigo" | "comunicacao" | "pesquisa" | "geral",
+  "recorrencia": "none" | "daily" | "weekly" | "monthly",
   "confirmacao": "frase curta no passado confirmando a ação com os detalhes relevantes"
 }`
 
@@ -181,7 +182,18 @@ serve(async (req) => {
       throw new Error(`LLM retornou JSON inválido: ${raw}`)
     }
 
-    const confirmacao = parsed.confirmacao ?? "Ação registrada."
+    const normalizedAction = {
+      acao: parsed.acao ?? "desconhecido",
+      titulo: parsed.titulo ?? transcript,
+      data: parsed.data ?? null,
+      hora: parsed.hora ?? null,
+      prioridade: parsed.prioridade ?? "media",
+      categoria: parsed.categoria ?? "geral",
+      recorrencia: parsed.recorrencia ?? "none",
+      confirmacao: parsed.confirmacao ?? "Ação registrada.",
+    }
+
+    const confirmacao = normalizedAction.confirmacao
     let audioContent: string | null = null
 
     if (GOOGLE_TTS_KEY) {
@@ -217,7 +229,7 @@ serve(async (req) => {
     return jsonResponse({
       ok: true,
       transcript,
-      action: parsed,
+      action: normalizedAction,
       confirmacao,
       audio: audioContent,
     })

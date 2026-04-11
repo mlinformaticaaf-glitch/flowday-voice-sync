@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Supabase local temp artifacts
+supabase/.temp/

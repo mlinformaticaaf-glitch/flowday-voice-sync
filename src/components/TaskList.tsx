@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useAppStore, Priority, Category, Task } from '@/stores/useAppStore';
+import { toast } from 'sonner';
+import { useAppStore, Priority, Category, Recurrence, Task } from '@/stores/useAppStore';
 import { Check, Trash2, Plus } from 'lucide-react';
 
 const PRIORITY_COLORS: Record<Priority, string> = {
@@ -15,29 +16,58 @@ const CATEGORY_LABELS: Record<Category, string> = {
   geral: 'Geral',
 };
 
+const RECURRENCE_LABELS: Record<Recurrence, string> = {
+  none: 'Sem repetição',
+  daily: 'Diária',
+  weekly: 'Semanal',
+  monthly: 'Mensal',
+};
+
 export default function TaskList() {
-  const { tasks, addTask, toggleTask, deleteTask } = useAppStore();
+  const { tasks, addTask, toggleTask, deleteTask, loading } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<Priority>('media');
   const [category, setCategory] = useState<Category>('geral');
+  const [recurrence, setRecurrence] = useState<Recurrence>('none');
   const [dueDate, setDueDate] = useState('');
 
-  const submit = () => {
+  const submit = async () => {
     if (!title.trim()) return;
-    addTask({ title: title.trim(), priority, category, dueDate: dueDate || null });
-    setTitle('');
-    setDueDate('');
-    setShowForm(false);
+    try {
+      await addTask({
+        title: title.trim(),
+        priority,
+        category,
+        kind: 'task',
+        recurrence,
+        dueDate: dueDate || null,
+      });
+      setTitle('');
+      setDueDate('');
+      setRecurrence('none');
+      setShowForm(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Falha ao criar tarefa.');
+    }
   };
 
-  const pending = tasks.filter((t) => !t.completed);
-  const done = tasks.filter((t) => t.completed);
+  const taskItems = tasks.filter((task) => task.kind === 'task');
+  const pending = taskItems.filter((t) => !t.completed);
+  const done = taskItems.filter((t) => t.completed);
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Carregando tarefas...</p>;
+  }
 
   const renderTask = (t: Task) => (
     <div key={t.id} className="flex items-center gap-3 bg-secondary/50 rounded-md px-3 py-2 group">
       <button
-        onClick={() => toggleTask(t.id)}
+        onClick={() => {
+          void toggleTask(t.id).catch((error) => {
+            toast.error(error instanceof Error ? error.message : 'Falha ao atualizar tarefa.');
+          });
+        }}
         className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
           t.completed ? 'bg-primary border-primary' : 'border-border hover:border-primary/50'
         }`}
@@ -53,11 +83,16 @@ export default function TaskList() {
             {t.priority}
           </span>
           <span className="text-[10px] text-muted-foreground">{CATEGORY_LABELS[t.category]}</span>
+          {t.recurrence !== 'none' && <span className="text-[10px] text-primary">{RECURRENCE_LABELS[t.recurrence]}</span>}
           {t.dueDate && <span className="text-[10px] text-muted-foreground">{t.dueDate}</span>}
         </div>
       </div>
       <button
-        onClick={() => deleteTask(t.id)}
+        onClick={() => {
+          void deleteTask(t.id).catch((error) => {
+            toast.error(error instanceof Error ? error.message : 'Falha ao excluir tarefa.');
+          });
+        }}
         className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <Trash2 size={14} />
@@ -107,13 +142,23 @@ export default function TaskList() {
               <option value="pesquisa">Pesquisa</option>
               <option value="geral">Geral</option>
             </select>
+            <select
+              value={recurrence}
+              onChange={(e) => setRecurrence(e.target.value as Recurrence)}
+              className="bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground"
+            >
+              <option value="none">Sem repetição</option>
+              <option value="daily">Diária</option>
+              <option value="weekly">Semanal</option>
+              <option value="monthly">Mensal</option>
+            </select>
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               className="bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground"
             />
-            <button onClick={submit} className="bg-primary text-primary-foreground rounded-md px-3 py-1 text-xs font-medium">
+            <button onClick={() => void submit()} className="bg-primary text-primary-foreground rounded-md px-3 py-1 text-xs font-medium">
               Criar
             </button>
           </div>
