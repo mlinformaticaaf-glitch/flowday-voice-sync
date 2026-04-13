@@ -141,17 +141,75 @@ serve(async (req: Request) => {
       throw new Error("Transcrição vazia — áudio não reconhecido")
     }
 
-    const systemPrompt = `Você é o FlowDay, assistente de produtividade pessoal. Fale sempre em português do Brasil, tom direto e profissional. Ao receber um comando, retorne SOMENTE JSON válido sem markdown e sem explicações:
+    const hoje = new Date().toLocaleDateString("pt-BR", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "America/Sao_Paulo",
+    })
+
+    const systemPrompt = `Você é o ATLAS, assistente de voz do FlowDay.
+Hoje é ${hoje}. Fale sempre em português do Brasil.
+
+Ao receber um comando, retorne SOMENTE um JSON válido sem markdown:
+{ "acoes": [ <uma ou mais ações> ], "confirmacao": "frase confirmando tudo" }
+
+Cada ação dentro do array "acoes" segue este schema:
 {
-  "acao": "criar_tarefa" | "criar_habito" | "criar_compromisso" | "listar_dia" | "listar_tarefas" | "inbox" | "desconhecido",
-  "titulo": "texto do item ou null",
+  "acao": "criar_tarefa" | "criar_habito" | "criar_compromisso" | "inbox",
+  "titulo": "string obrigatório",
   "data": "YYYY-MM-DD ou null",
   "hora": "HH:MM ou null",
   "prioridade": "alta" | "media" | "baixa",
   "categoria": "codigo" | "comunicacao" | "pesquisa" | "geral",
-  "recorrencia": "none" | "daily" | "weekly" | "monthly",
-  "confirmacao": "frase curta no passado confirmando a ação com os detalhes relevantes"
-}`
+  "recorrencia": "none" | "daily" | "weekly" | "monthly"
+}
+
+REGRAS DE INTERPRETAÇÃO:
+
+1. SEMPRE use array, mesmo para um único item.
+   Exemplo: "adicionar tarefa reunião" →
+   { "acoes": [{ "acao": "criar_tarefa", "titulo": "Reunião", ... }],
+     "confirmacao": "Tarefa Reunião criada." }
+
+2. LISTAS: quando o usuário listar vários itens, crie uma ação para cada.
+   Exemplo: "inbox: ligar pro João, enviar relatório, revisar contrato" →
+   { "acoes": [
+       { "acao": "inbox", "titulo": "Ligar pro João", ... },
+       { "acao": "inbox", "titulo": "Enviar relatório", ... },
+       { "acao": "inbox", "titulo": "Revisar contrato", ... }
+     ],
+     "confirmacao": "3 itens adicionados ao inbox." }
+
+3. COMANDOS COMPOSTOS: um comando pode criar itens em módulos diferentes.
+   Exemplo: "tarefa reunião amanhã às 14h e hábito meditar todo dia" →
+   { "acoes": [
+       { "acao": "criar_compromisso", "titulo": "Reunião",
+         "data": "YYYY-MM-DD", "hora": "14:00", ... },
+       { "acao": "criar_habito", "titulo": "Meditar",
+         "recorrencia": "daily", ... }
+     ],
+     "confirmacao": "Compromisso Reunião e hábito Meditar criados." }
+
+4. DATAS RELATIVAS: interprete corretamente.
+   "hoje" → data atual, "amanhã" → +1 dia, "semana que vem" → próxima
+   segunda-feira, "todo dia" → recorrencia: daily,
+   "toda semana" → recorrencia: weekly
+
+5. MÓDULOS disponíveis:
+   - criar_tarefa: tarefas únicas com ou sem data/prazo
+   - criar_habito: rotinas recorrentes (recorrencia nunca é "none")
+   - criar_compromisso: eventos com data e hora (hora é obrigatória)
+   - inbox: captura rápida sem estrutura, processamento posterior
+
+6. PRIORIDADE: inferir pelo contexto.
+   "urgente", "importante", "crítico" → alta
+   "quando puder", "sem pressa" → baixa
+   padrão → media
+
+7. Se não entender o comando, retorne:
+   { "acoes": [], "confirmacao": "Não entendi o comando. Pode repetir?" }`
 
     const llmRes = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -181,7 +239,7 @@ serve(async (req: Request) => {
     const llmData = await llmRes.json()
     const raw = llmData.choices?.[0]?.message?.content ?? ""
 
-    let parsed
+    let parsed: any
     try {
       const clean = raw.replace(/```json|```/g, "").trim()
       parsed = JSON.parse(clean)
@@ -189,18 +247,24 @@ serve(async (req: Request) => {
       throw new Error(`LLM retornou JSON inválido: ${raw}`)
     }
 
-    const normalizedAction = {
-      acao: parsed.acao ?? "desconhecido",
-      titulo: parsed.titulo ?? transcript,
-      data: parsed.data ?? null,
-      hora: parsed.hora ?? null,
-      prioridade: parsed.prioridade ?? "media",
-      categoria: parsed.categoria ?? "geral",
-      recorrencia: parsed.recorrencia ?? "none",
-      confirmacao: parsed.confirmacao ?? "Ação registrada.",
-    }
+    // Suporte a array (novo) e objeto único (retrocompatibilidade)
+    const rawAcoes = Array.isArray(parsed.acoes)
+      ? parsed.acoes
+      : parsed.acao
+        ? [parsed] // formato antigo — envolve em array
+        : []
 
-    const confirmacao = normalizedAction.confirmacao
+    const acoes = rawAcoes.map((a: any) => ({
+      acao: a.acao ?? "desconhecido",
+      titulo: a.titulo ?? transcript,
+      data: a.data ?? null,
+      hora: a.hora ?? null,
+      prioridade: a.prioridade ?? "media",
+      categoria: a.categoria ?? "geral",
+      recorrencia: a.recorrencia ?? "none",
+    }))
+
+    const confirmacao = parsed.confirmacao ?? "Ação registrada."
     let audioContent: string | null = null
 
     if (GOOGLE_TTS_KEY) {
@@ -236,7 +300,8 @@ serve(async (req: Request) => {
     return jsonResponse({
       ok: true,
       transcript,
-      action: normalizedAction,
+      acoes,
+      action: acoes[0] ?? null,
       confirmacao,
       audio: audioContent,
     })

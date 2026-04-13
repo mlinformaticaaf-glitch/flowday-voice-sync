@@ -27,6 +27,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!supabase/functions/.env.example
 
 # Supabase local temp artifacts
 supabase/.temp/

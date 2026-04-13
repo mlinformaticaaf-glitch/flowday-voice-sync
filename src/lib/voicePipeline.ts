@@ -17,23 +17,25 @@ function getAudioFileName(audioBlob: Blob): string {
 }
 
 export interface LLMAction {
-  acao: 'criar_tarefa' | 'criar_habito' | 'criar_compromisso' | 'listar_dia' | 'listar_tarefas' | 'inbox' | 'desconhecido';
+  acao: 'criar_tarefa' | 'criar_habito' | 'criar_compromisso' | 'inbox' | 'desconhecido';
   titulo: string;
   data: string | null;
   hora: string | null;
   prioridade: 'alta' | 'media' | 'baixa';
-  categoria: 'codigo' | 'comunicacao' | 'pesquisa' | 'geral';
+  categoria: string;
   recorrencia: 'none' | 'daily' | 'weekly' | 'monthly';
-  confirmacao: string;
 }
 
-export interface PipelineResult {
+export interface VoicePipelineResult {
   ok: true;
   transcript: string;
-  action: LLMAction;
+  acoes: LLMAction[];
+  action: LLMAction | null;
   confirmacao: string;
   audio: string | null;
 }
+
+export type PipelineResult = VoicePipelineResult;
 
 interface PipelineErrorResult {
   ok: false;
@@ -42,9 +44,9 @@ interface PipelineErrorResult {
   retryable?: boolean;
 }
 
-type PipelineResponse = PipelineResult | PipelineErrorResult;
+type PipelineResponse = VoicePipelineResult | PipelineErrorResult;
 
-export async function runVoicePipeline(audioBlob: Blob): Promise<PipelineResult> {
+export async function runVoicePipeline(audioBlob: Blob): Promise<VoicePipelineResult> {
   if (audioBlob.size === 0) {
     throw new Error('Áudio vazio. Tente gravar novamente.');
   }

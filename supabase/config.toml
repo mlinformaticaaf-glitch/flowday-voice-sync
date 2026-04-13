@@ -1,1 +1,6 @@
 project_id = "uhmhnigoohfbcbyxjbmc"
+
+[functions.voice-pipeline]
+enabled = true
+verify_jwt = false
+import_map = "./functions/deno.json"
