@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="100" ry="100" fill="#2d3748"/>
+
+  <!-- Clock face circle -->
+  <circle cx="256" cy="228" r="148" fill="#1a2535" stroke="#3ddba0" stroke-width="4"/>
+
+  <!-- Clock hour dots (12 positions) -->
+  <!-- 12 o'clock -->
+  <circle cx="256" cy="96" r="9" fill="#3ddba0"/>
+  <!-- 1 o'clock -->
+  <circle cx="330" cy="116" r="7" fill="#3ddba0"/>
+  <!-- 2 o'clock -->
+  <circle cx="384" cy="170" r="7" fill="#3ddba0"/>
+  <!-- 3 o'clock -->
+  <circle cx="404" cy="244" r="9" fill="#3ddba0"/>
+  <!-- 4 o'clock -->
+  <circle cx="384" cy="318" r="7" fill="#3ddba0"/>
+  <!-- 5 o'clock -->
+  <circle cx="330" cy="372" r="7" fill="#3ddba0"/>
+  <!-- 6 o'clock -->
+  <circle cx="256" cy="392" r="9" fill="#3ddba0"/>
+  <!-- 7 o'clock -->
+  <circle cx="182" cy="372" r="7" fill="#3ddba0"/>
+  <!-- 8 o'clock -->
+  <circle cx="128" cy="318" r="7" fill="#3ddba0"/>
+  <!-- 9 o'clock -->
+  <circle cx="108" cy="244" r="9" fill="#3ddba0"/>
+  <!-- 10 o'clock -->
+  <circle cx="128" cy="170" r="7" fill="#3ddba0"/>
+  <!-- 11 o'clock -->
+  <circle cx="182" cy="116" r="7" fill="#3ddba0"/>
+
+  <!-- Clock hands -->
+  <!-- Hour hand (pointing ~10 o'clock) -->
+  <line x1="256" y1="228" x2="190" y2="164" stroke="#3ddba0" stroke-width="12" stroke-linecap="round"/>
+  <!-- Minute hand (pointing ~12 o'clock) -->
+  <line x1="256" y1="228" x2="256" y2="130" stroke="#3ddba0" stroke-width="8" stroke-linecap="round"/>
+  <!-- Center dot -->
+  <circle cx="256" cy="228" r="10" fill="#3ddba0"/>
+
+  <!-- Sync arrows around the clock -->
+  <!-- Top-right arrow arc (clockwise, upper portion) -->
+  <path d="M 256 68 A 190 190 0 0 1 426 198" fill="none" stroke="#3ddba0" stroke-width="20" stroke-linecap="round"/>
+  <!-- Arrow head top-right -->
+  <polygon points="426,168 442,210 398,200" fill="#3ddba0"/>
+
+  <!-- Bottom-left arrow arc (clockwise, lower portion) -->
+  <path d="M 256 388 A 190 190 0 0 1 86 258" fill="none" stroke="#3ddba0" stroke-width="20" stroke-linecap="round"/>
+  <!-- Arrow head bottom-left -->
+  <polygon points="86,288 70,246 114,256" fill="#3ddba0"/>
+
+  <!-- Microphone body -->
+  <rect x="232" y="390" width="48" height="68" rx="24" ry="24" fill="#3ddba0"/>
+
+  <!-- Microphone stand arc -->
+  <path d="M 204 436 Q 204 488 256 488 Q 308 488 308 436" fill="none" stroke="#3ddba0" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Microphone base pole -->
+  <line x1="256" y1="488" x2="256" y2="504" stroke="#3ddba0" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Microphone base -->
+  <rect x="220" y="500" width="72" height="12" rx="6" fill="#3ddba0"/>
+</svg>
