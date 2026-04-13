@@ -15,6 +15,57 @@ const corsHeaders = {
 
 const MIN_AUDIO_BYTES = 1024
 
+function toTitleCase(value: string) {
+  if (!value) return value
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function splitCompoundItems(transcript: string) {
+  const cleaned = transcript
+    .replace(/^(inbox|caixa de entrada|anota(?:r)?|adiciona(?:r)?|cria(?:r)?|coloca(?:r)?)\s*:?\s*/i, "")
+    .replace(/^(tarefas?|h[áa]bitos?|compromissos?)\s*:?\s*/i, "")
+    .trim()
+
+  if (!cleaned) return []
+
+  const primary = cleaned
+    .split(/\s*(?:,|;|\be depois\b|\be tamb[eé]m\b|\btamb[eé]m\b)\s*/i)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 1)
+
+  if (primary.length > 1) return primary
+
+  if (/\be\b/i.test(cleaned) && cleaned.length > 20) {
+    const secondary = cleaned
+      .split(/\s+e\s+/i)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 1)
+
+    if (secondary.length > 1) return secondary
+  }
+
+  return primary
+}
+
+function expandCompoundActions(transcript: string, actions: Array<Record<string, unknown>>) {
+  if (actions.length !== 1) return actions
+
+  const baseAction = actions[0]
+  const actionType = String(baseAction.acao ?? "")
+  const supportsExpansion = actionType === "inbox" || actionType === "criar_tarefa" || actionType === "criar_habito"
+  const likelyCompound = /,|;|\be depois\b|\be tamb[eé]m\b|\btamb[eé]m\b/i.test(transcript)
+
+  if (!supportsExpansion || !likelyCompound) return actions
+
+  const items = splitCompoundItems(transcript)
+  if (items.length <= 1) return actions
+
+  return items.map((item) => ({
+    ...baseAction,
+    titulo: toTitleCase(item),
+  }))
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -222,7 +273,7 @@ REGRAS DE INTERPRETAÇÃO:
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
           temperature: 0.2,
-          max_tokens: 300,
+          max_tokens: 700,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: transcript },
@@ -254,7 +305,12 @@ REGRAS DE INTERPRETAÇÃO:
         ? [parsed] // formato antigo — envolve em array
         : []
 
-    const acoes = rawAcoes.map((a: any) => ({
+    const expandedRawAcoes = expandCompoundActions(
+      transcript,
+      rawAcoes.filter((a: unknown) => Boolean(a) && typeof a === "object") as Array<Record<string, unknown>>,
+    )
+
+    const acoes = expandedRawAcoes.map((a: any) => ({
       acao: a.acao ?? "desconhecido",
       titulo: a.titulo ?? transcript,
       data: a.data ?? null,

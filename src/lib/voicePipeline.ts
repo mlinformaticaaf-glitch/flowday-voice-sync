@@ -65,21 +65,46 @@ export async function runVoicePipeline(audioBlob: Blob): Promise<VoicePipelineRe
   return data;
 }
 
-export function playAudioBase64(base64Mp3: string): void {
+/**
+ * Reproduz áudio base64 e expõe o AnalyserNode via onAnalyser
+ * para que o modal visualize as frequências em tempo real.
+ * Chama onEnded quando a reprodução terminar.
+ */
+export function playAudioBase64(
+  base64Mp3: string,
+  onAnalyser?: (analyser: AnalyserNode) => void,
+  onEnded?: () => void,
+): void {
   const binary = atob(base64Mp3);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
   const audioCtx = new AudioContext();
+
   audioCtx
     .decodeAudioData(bytes.buffer)
     .then((buffer) => {
       const source = audioCtx.createBufferSource();
+
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.75;
+
       source.buffer = buffer;
-      source.connect(audioCtx.destination);
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      if (onAnalyser) onAnalyser(analyser);
+
+      source.onended = () => {
+        void audioCtx.close();
+        if (onEnded) onEnded();
+      };
+
       source.start();
     })
     .catch(() => {
       void audioCtx.close();
+      if (onEnded) onEnded?.();
     });
 }
