@@ -20,51 +20,6 @@ function toTitleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-function splitCompoundItems(transcript: string) {
-  const cleaned = transcript
-    .replace(/^(inbox|caixa de entrada|anota(?:r)?|adiciona(?:r)?|cria(?:r)?|coloca(?:r)?)\s*:?\s*/i, "")
-    .replace(/^(tarefas?|h[áa]bitos?|compromissos?)\s*:?\s*/i, "")
-    .trim()
-
-  if (!cleaned) return []
-
-  const primary = cleaned
-    .split(/\s*(?:,|;|\be depois\b|\be tamb[eé]m\b|\btamb[eé]m\b)\s*/i)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 1)
-
-  if (primary.length > 1) return primary
-
-  if (/\be\b/i.test(cleaned) && cleaned.length > 20) {
-    const secondary = cleaned
-      .split(/\s+e\s+/i)
-      .map((part) => part.trim())
-      .filter((part) => part.length > 1)
-
-    if (secondary.length > 1) return secondary
-  }
-
-  return primary
-}
-
-function expandCompoundActions(transcript: string, actions: Array<Record<string, unknown>>) {
-  if (actions.length !== 1) return actions
-
-  const baseAction = actions[0]
-  const actionType = String(baseAction.acao ?? "")
-  const supportsExpansion = actionType === "inbox" || actionType === "criar_tarefa" || actionType === "criar_habito"
-  const likelyCompound = /,|;|\be depois\b|\be tamb[eé]m\b|\btamb[eé]m\b/i.test(transcript)
-
-  if (!supportsExpansion || !likelyCompound) return actions
-
-  const items = splitCompoundItems(transcript)
-  if (items.length <= 1) return actions
-
-  return items.map((item) => ({
-    ...baseAction,
-    titulo: toTitleCase(item),
-  }))
-}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -151,45 +106,60 @@ serve(async (req: Request) => {
 
     const formData = await req.formData()
     const audioFile = formData.get("audio")
+    const textPrompt = formData.get("text")
 
-    if (!audioFile || !(audioFile instanceof File)) {
-      throw new Error("Campo 'audio' ausente ou inválido no FormData")
+    const googleEvents = formData.get("google_events") ?? "[]"
+    const googleTasks  = formData.get("google_tasks")  ?? "[]"
+    const flowdayInbox = formData.get("flowday_inbox") ?? "[]"
+    const habitosHoje  = formData.get("habitos_hoje")  ?? "[]"
+    let history = []
+    try {
+      history = JSON.parse(String(formData.get("history") ?? "[]"))
+    } catch {
+      history = []
     }
 
-    if (audioFile.size < MIN_AUDIO_BYTES) {
-      return jsonResponse({
-        ok: false,
-        code: "audio_too_short",
-        retryable: true,
-        error: "Segure o botão por mais tempo e fale antes de soltar.",
-      })
-    }
+    let transcript = ""
 
-    const sttForm = new FormData()
-    sttForm.append("file", audioFile, getAudioFilename(audioFile))
-    sttForm.append("model", "whisper-large-v3")
-    sttForm.append("language", "pt")
-    sttForm.append("response_format", "json")
+    if (audioFile && audioFile instanceof File && audioFile.size >= MIN_AUDIO_BYTES) {
+      const sttForm = new FormData()
+      sttForm.append("file", audioFile, getAudioFilename(audioFile))
+      sttForm.append("model", "whisper-large-v3")
+      sttForm.append("language", "pt")
+      sttForm.append("response_format", "json")
 
-    const sttRes = await fetch(
-      "https://api.groq.com/openai/v1/audio/transcriptions",
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
-        body: sttForm,
+      const sttRes = await fetch(
+        "https://api.groq.com/openai/v1/audio/transcriptions",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
+          body: sttForm,
+        }
+      )
+
+      if (!sttRes.ok) {
+        const err = await sttRes.text()
+        throw new Error(`Groq STT falhou (${sttRes.status}): ${err}`)
       }
-    )
 
-    if (!sttRes.ok) {
-      const err = await sttRes.text()
-      throw new Error(`Groq STT falhou (${sttRes.status}): ${err}`)
+      const sttData = await sttRes.json()
+      transcript = sttData.text?.trim()
+    } else if (textPrompt) {
+      transcript = String(textPrompt).trim()
+    } else {
+      if (audioFile && audioFile instanceof File && audioFile.size < MIN_AUDIO_BYTES) {
+        return jsonResponse({
+          ok: false,
+          code: "audio_too_short",
+          retryable: true,
+          error: "Segure o botão por mais tempo e fale antes de soltar.",
+        })
+      }
+      throw new Error("Áudio ausente/inválido e nenhum comando de texto fornecido")
     }
-
-    const sttData = await sttRes.json()
-    const transcript = sttData.text?.trim()
 
     if (!transcript) {
-      throw new Error("Transcrição vazia — áudio não reconhecido")
+      throw new Error("Comando vazio — não reconhecido")
     }
 
     const hoje = new Date().toLocaleDateString("pt-BR", {
@@ -208,14 +178,29 @@ Ao receber um comando, retorne SOMENTE um JSON válido sem markdown:
 
 Cada ação dentro do array "acoes" segue este schema:
 {
-  "acao": "criar_tarefa" | "criar_habito" | "criar_compromisso" | "inbox",
+  "acao": "criar_tarefa" | "criar_habito" | "criar_compromisso" | "inbox" | "consultar_agenda" | "listar_tarefas" | "resumo_do_dia" | "marcar_concluido" | "reagendar" | "deletar_item",
   "titulo": "string obrigatório",
   "data": "YYYY-MM-DD ou null",
   "hora": "HH:MM ou null",
   "prioridade": "alta" | "media" | "baixa",
   "categoria": "codigo" | "comunicacao" | "pesquisa" | "geral",
-  "recorrencia": "none" | "daily" | "weekly" | "monthly"
+  "recorrencia": "none" | "daily" | "weekly" | "monthly",
+  "ref_titulo": "nome do item referenciado",
+  "nova_data": "YYYY-MM-DD ou null para reagendar",
+  "nova_hora": "HH:MM ou null para reagendar",
+  "modulo": "tarefa" | "habito" | "inbox" | "compromisso"
 }
+
+CONTEXTO ATUAL DO USUÁRIO:
+- Próximos eventos (Google Agenda): ${googleEvents}
+- Tarefas pendentes (Google Tasks): ${googleTasks}
+- Inbox FlowDay: ${flowdayInbox}
+- Hábitos de hoje: ${habitosHoje}
+
+Use essas informações para:
+1. Responder perguntas sobre a agenda sem inventar dados
+2. Evitar criar duplicatas de tarefas/eventos que já existem
+3. Referenciar itens existentes pelo nome ao confirmar ações
 
 REGRAS DE INTERPRETAÇÃO:
 
@@ -260,7 +245,21 @@ REGRAS DE INTERPRETAÇÃO:
    padrão → media
 
 7. Se não entender o comando, retorne:
-   { "acoes": [], "confirmacao": "Não entendi o comando. Pode repetir?" }`
+   { "acoes": [], "confirmacao": "Não entendi o comando. Pode repetir?" }
+
+8. CONSULTAS: quando o usuário perguntar sobre agenda, tarefas ou dia, use os dados
+   do CONTEXTO ATUAL para responder com precisão. A "confirmacao" deve conter a resposta diretamente (não apenas "ok, consultei").
+
+9. RESUMO DO DIA: quando o usuário pedir "o que tenho hoje", "meu dia", "resumo",
+   retorne acao: "resumo_do_dia" e na "confirmacao" inclua:
+   - Horário e nome dos compromissos do dia
+   - Quantidade de tarefas pendentes e as de alta prioridade
+   - Hábitos pendentes para hoje
+   Exemplo de confirmacao: "Bom dia! Hoje você tem: reunião às 14h com o time, 3 tarefas pendentes sendo 1 urgente (Relatório Q2), e 2 hábitos para fazer (Meditação e Exercício)."
+
+10. INBOX MÚLTIPLO: quando o usuário listar itens separados por vírgula, "e",
+    ponto e vírgula ou pausa natural, SEMPRE crie uma ação inbox separada para
+    cada item. Nunca agrupe múltiplos itens em um único titulo.`
 
     const llmRes = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -273,9 +272,11 @@ REGRAS DE INTERPRETAÇÃO:
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
           temperature: 0.2,
-          max_tokens: 700,
+          max_tokens: 1200,
+          response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemPrompt },
+            ...(Array.isArray(history) ? history : []),
             { role: "user", content: transcript },
           ],
         }),
@@ -305,12 +306,9 @@ REGRAS DE INTERPRETAÇÃO:
         ? [parsed] // formato antigo — envolve em array
         : []
 
-    const expandedRawAcoes = expandCompoundActions(
-      transcript,
-      rawAcoes.filter((a: unknown) => Boolean(a) && typeof a === "object") as Array<Record<string, unknown>>,
-    )
+    const validAcoes = rawAcoes.filter((a: unknown) => Boolean(a) && typeof a === "object") as Array<Record<string, unknown>>
 
-    const acoes = expandedRawAcoes.map((a: any) => ({
+    const acoes = validAcoes.map((a: any) => ({
       acao: a.acao ?? "desconhecido",
       titulo: a.titulo ?? transcript,
       data: a.data ?? null,
@@ -318,6 +316,10 @@ REGRAS DE INTERPRETAÇÃO:
       prioridade: a.prioridade ?? "media",
       categoria: a.categoria ?? "geral",
       recorrencia: a.recorrencia ?? "none",
+      ref_titulo: a.ref_titulo ?? null,
+      nova_data: a.nova_data ?? null,
+      nova_hora: a.nova_hora ?? null,
+      modulo: a.modulo ?? null,
     }))
 
     const confirmacao = parsed.confirmacao ?? "Ação registrada."

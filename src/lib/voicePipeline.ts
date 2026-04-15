@@ -65,6 +65,33 @@ export async function runVoicePipeline(audioBlob: Blob): Promise<VoicePipelineRe
   return data;
 }
 
+export async function runTextPipeline(text: string, context?: Record<string, string>): Promise<VoicePipelineResult> {
+  if (!text.trim()) {
+    throw new Error('Comando de texto vazio.');
+  }
+
+  const formData = new FormData();
+  formData.append('text', text);
+
+  if (context) {
+    if (context.googleEvents) formData.append('google_events', context.googleEvents);
+    if (context.googleTasks) formData.append('google_tasks', context.googleTasks);
+    if (context.flowdayInbox) formData.append('flowday_inbox', context.flowdayInbox);
+    if (context.habitosHoje) formData.append('habitos_hoje', context.habitosHoje);
+    if (context.history) formData.append('history', context.history);
+  }
+
+  const { data, error } = await supabase.functions.invoke<PipelineResponse>('voice-pipeline', {
+    body: formData,
+  });
+
+  if (error) throw new Error(error.message || 'Erro na pipeline de voz (texto)');
+  if (!data) throw new Error('Resposta vazia do pipeline de voz (texto).');
+  if ('error' in data) throw new Error(data.error);
+
+  return data;
+}
+
 /**
  * Reproduz áudio base64 e expõe o AnalyserNode via onAnalyser
  * para que o modal visualize as frequências em tempo real.

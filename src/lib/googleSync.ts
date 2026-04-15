@@ -233,3 +233,29 @@ export async function deleteGoogleCalendarEvent(accessToken: string, externalId:
     method: 'DELETE',
   });
 }
+
+export async function updateGoogleCalendarEvent(accessToken: string, externalId: string, appointment: Partial<Pick<Appointment, 'title' | 'date' | 'time' | 'duration' | 'recurrence'>>): Promise<void> {
+  const body: any = {};
+  if (appointment.title) body.summary = appointment.title;
+  
+  if (appointment.date && appointment.time && appointment.duration !== undefined) {
+    const start = toGoogleDateTime(appointment.date, appointment.time);
+    const end = new Date(new Date(start).getTime() + appointment.duration * 60000).toISOString();
+    body.start = { dateTime: start, timeZone: getLocalTimeZone() };
+    body.end = { dateTime: end, timeZone: getLocalTimeZone() };
+  }
+
+  if (appointment.recurrence) {
+    const rrule = recurrenceToRRule(appointment.recurrence);
+    if (rrule) {
+      body.recurrence = rrule;
+    } else {
+      body.recurrence = null;
+    }
+  }
+
+  await fetchGoogleJson(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${externalId}`, accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}

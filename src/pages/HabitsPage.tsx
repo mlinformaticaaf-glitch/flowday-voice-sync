@@ -9,39 +9,9 @@ import { useAppStore } from '@/stores/useAppStore';
 
 type HabitEntryRow = Tables<'habit_entries'>;
 
+import HabitCard from '@/components/HabitCard';
+
 const HABIT_COLORS = ['#22c55e', '#14b8a6', '#f59e0b', '#ef4444', '#3b82f6'];
-
-function getHabitWeeklyGoal(recurrence: 'none' | 'daily' | 'weekly' | 'monthly'): number {
-  switch (recurrence) {
-    case 'weekly':
-      return 1;
-    case 'monthly':
-      return 1;
-    case 'daily':
-    case 'none':
-    default:
-      return 5;
-  }
-}
-
-function getPastDays(totalDays: number): string[] {
-  return Array.from({ length: totalDays }, (_, index) => format(subDays(new Date(), totalDays - index - 1), 'yyyy-MM-dd'));
-}
-
-function getHabitStreak(habitId: string, entries: HabitEntryRow[]): number {
-  const lookup = new Set(entries.filter((entry) => entry.habit_id === habitId).map((entry) => entry.entry_date));
-  let streak = 0;
-
-  for (let day = 0; day < 365; day += 1) {
-    const current = format(subDays(new Date(), day), 'yyyy-MM-dd');
-    if (!lookup.has(current)) {
-      break;
-    }
-    streak += 1;
-  }
-
-  return streak;
-}
 
 export default function HabitsPage() {
   const { user } = useAuth();
@@ -52,7 +22,6 @@ export default function HabitsPage() {
   const [title, setTitle] = useState('');
 
   const habits = useMemo(() => tasks.filter((task) => task.kind === 'habit'), [tasks]);
-  const days = useMemo(() => getPastDays(84), []);
   const today = format(new Date(), 'yyyy-MM-dd');
 
   useEffect(() => {
@@ -70,7 +39,7 @@ export default function HabitsPage() {
         .from('habit_entries')
         .select('*')
         .eq('user_id', user.id)
-        .gte('entry_date', days[0])
+        .gte('entry_date', format(subDays(new Date(), 84), 'yyyy-MM-dd'))
         .order('entry_date', { ascending: true });
 
       if (!active) return;
@@ -89,7 +58,7 @@ export default function HabitsPage() {
     return () => {
       active = false;
     };
-  }, [days, user?.id]);
+  }, [user?.id]);
 
   const handleCreateHabit = async () => {
     if (!title.trim()) {
@@ -189,53 +158,18 @@ export default function HabitsPage() {
 
       <div className="space-y-3">
         {habits.map((habit, index) => {
-          const todayDone = entries.some((entry) => entry.habit_id === habit.id && entry.entry_date === today);
-          const weeklyGoal = getHabitWeeklyGoal(habit.recurrence);
-          const weeklyCount = entries.filter((entry) => entry.habit_id === habit.id && entry.entry_date >= format(subDays(new Date(), 6), 'yyyy-MM-dd')).length;
-          const streak = getHabitStreak(habit.id, entries);
           const heatColor = HABIT_COLORS[index % HABIT_COLORS.length];
 
           return (
-            <div key={habit.id} className="bg-card border border-border rounded-lg p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-1 duration-200" style={{ animationDelay: `${index * 50}ms` }}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: heatColor }} />
-                    <h2 className="text-sm font-semibold text-foreground">{habit.title}</h2>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {weeklyCount}/{weeklyGoal} nesta semana · {streak} dias de sequência
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => void handleToggleToday(habit.id)}
-                    className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium ${todayDone ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground border border-border'}`}
-                  >
-                    <Flame size={13} />
-                    {todayDone ? 'Feito hoje' : 'Marcar hoje'}
-                  </button>
-                  <button onClick={() => void handleDeleteHabit(habit.id)} className="text-muted-foreground hover:text-foreground">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <div className="grid grid-flow-col grid-rows-7 gap-1 min-w-max">
-                  {days.map((day) => {
-                    const active = entries.some((entry) => entry.habit_id === habit.id && entry.entry_date === day);
-                    return (
-                      <div
-                        key={`${habit.id}-${day}`}
-                        className="w-3 h-3 rounded-[3px] border border-background/20"
-                        style={{ backgroundColor: active ? heatColor : 'hsl(var(--muted))', opacity: active ? 1 : 0.45 }}
-                        title={`${habit.title} · ${day}${active ? ' · concluído' : ''}`}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
+            <div key={habit.id} className="animate-in fade-in-0 slide-in-from-top-1 duration-200" style={{ animationDelay: `${index * 50}ms` }}>
+              <HabitCard
+                habit={habit}
+                entries={entries}
+                today={today}
+                onToggleToday={handleToggleToday}
+                onDelete={handleDeleteHabit}
+                heatColor={heatColor}
+              />
             </div>
           );
         })}

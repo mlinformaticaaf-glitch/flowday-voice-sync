@@ -15,6 +15,7 @@ const TasksPage = lazy(() => import("./pages/TasksPage"));
 const AgendaPage = lazy(() => import("./pages/AgendaPage"));
 const HabitsPage = lazy(() => import("./pages/HabitsPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
 const queryClient = new QueryClient({
@@ -44,7 +45,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { session, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <PageSpinner />;
   if (session) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -58,6 +59,7 @@ const AppRoutes = () => (
     <Route path="/agenda" element={<ProtectedRoute><Layout><AgendaPage /></Layout></ProtectedRoute>} />
     <Route path="/habitos" element={<ProtectedRoute><Layout><HabitsPage /></Layout></ProtectedRoute>} />
     <Route path="/projetos" element={<ProtectedRoute><Layout><ProjectsPage /></Layout></ProtectedRoute>} />
+    <Route path="/projetos/:id" element={<ProtectedRoute><Layout><ProjectDetailPage /></Layout></ProtectedRoute>} />
     <Route path="/configuracoes" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>

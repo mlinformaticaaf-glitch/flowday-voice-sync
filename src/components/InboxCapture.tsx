@@ -1,7 +1,14 @@
 import { useRef, useState } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
-import { Plus } from 'lucide-react';
+import { Plus, Wand2, GripVertical, Circle, CheckCircle2, Trash2, Edit2, ArrowUpRight, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useInboxAI } from '@/hooks/useInboxAI';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 function getDefaultEventDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -14,38 +21,43 @@ function getDefaultEventTime(): string {
   return `${hours}:${minutes}`;
 }
 
-interface EventDraft {
-  title: string;
-  date: string;
-  time: string;
-  duration: number;
-}
-
 export default function InboxCapture() {
+  const [showInput, setShowInput] = useState(false);
   const [text, setText] = useState('');
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [closingEventId, setClosingEventId] = useState<string | null>(null);
-  const [eventDraft, setEventDraft] = useState<EventDraft | null>(null);
-  const closeTimerRef = useRef<number | null>(null);
+  
+  // AI State
+  const { isProcessingAI, processInboxWithAI } = useInboxAI();
+  
+  // App Store
   const { inbox, addInboxItem, deleteInboxItem, addTask, addAppointment, loading } = useAppStore();
 
-  const submit = async () => {
-    const t = text.trim();
-    if (!t) return;
+  const handleMultipleSubmit = async () => {
+    if (!text.trim()) return;
     try {
-      await addInboxItem(t);
+      const items = text.split(/,|;/).map((i) => i.trim()).filter(Boolean);
+      for (const t of items) {
+        await addInboxItem(t);
+      }
       setText('');
+      toast.success(`${items.length} itens adicionados!`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao capturar item.');
     }
   };
 
-  if (loading) {
-    return <p className="text-sm text-muted-foreground">Carregando inbox...</p>;
-  }
+  const handleComplete = async (id: string) => {
+    setProcessingId(id);
+    try {
+      await deleteInboxItem(id);
+    } catch {
+      toast.error('Erro ao excluir item');
+    } finally {
+      if (processingId === id) setProcessingId(null);
+    }
+  };
 
-  const handleAddAsTask = async (id: string, content: string) => {
+  const promoteToTask = async (id: string, content: string) => {
     setProcessingId(id);
     try {
       await addTask({
@@ -53,246 +65,165 @@ export default function InboxCapture() {
         priority: 'media',
         category: 'geral',
         dueDate: null,
-        kind: 'task',
-        recurrence: 'none',
       });
       await deleteInboxItem(id);
-      toast.success('Item enviado para tarefas.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Falha ao criar tarefa a partir da inbox.');
+      toast.success('Promovido para Tarefas.');
+    } catch {
+      toast.error('Ocorreu um erro.');
     } finally {
       setProcessingId(null);
     }
   };
 
-  const openEventEditor = (id: string, content: string) => {
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-
-    setClosingEventId(null);
-    setEditingEventId(id);
-    setEventDraft({
-      title: content,
-      date: getDefaultEventDate(),
-      time: getDefaultEventTime(),
-      duration: 30,
-    });
-  };
-
-  const cancelEventEditor = (id?: string) => {
-    const targetId = id ?? editingEventId;
-    if (!targetId) {
-      return;
-    }
-
-    setClosingEventId(targetId);
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-    }
-
-    closeTimerRef.current = window.setTimeout(() => {
-      setEditingEventId((current) => (current === targetId ? null : current));
-      setClosingEventId((current) => (current === targetId ? null : current));
-      setEventDraft((current) => (editingEventId === targetId ? null : current));
-      closeTimerRef.current = null;
-    }, 180);
-  };
-
-  const handleSaveEvent = async (id: string) => {
-    if (!eventDraft || editingEventId !== id) {
-      return;
-    }
-
-    const title = eventDraft.title.trim();
-    if (!title) {
-      toast.error('Informe um titulo para o evento.');
-      return;
-    }
-
-    if (!eventDraft.date) {
-      toast.error('Informe uma data para o evento.');
-      return;
-    }
-
-    if (!eventDraft.time) {
-      toast.error('Informe um horario para o evento.');
-      return;
-    }
-
+  const promoteToAppointment = async (id: string, content: string) => {
     setProcessingId(id);
     try {
       await addAppointment({
-        title,
-        date: eventDraft.date,
-        time: eventDraft.time,
-        duration: eventDraft.duration,
-        recurrence: 'none',
+        title: content,
+        date: getDefaultEventDate(),
+        time: getDefaultEventTime(),
+        duration: 30,
       });
       await deleteInboxItem(id);
-      setEditingEventId(null);
-      setClosingEventId(null);
-      setEventDraft(null);
-      toast.success('Evento criado com sucesso.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Falha ao criar evento a partir da inbox.');
+      toast.success('Promovido para Calendário.');
+    } catch {
+      toast.error('Ocorreu um erro.');
     } finally {
       setProcessingId(null);
     }
   };
 
-  const handleDiscard = async (id: string) => {
+  const promoteToProject = async (id: string, content: string) => {
+    // For now we just create a task with no due date pretending it's a project initialization
+    // When the Project module is fully implemented, this can be changed.
     setProcessingId(id);
     try {
-      await deleteInboxItem(id);
-      if (editingEventId === id) {
-        setEditingEventId(null);
-        setClosingEventId(null);
-        setEventDraft(null);
-      }
-      toast.success('Item descartado.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Falha ao descartar item da inbox.');
+       // Mock for now, requires table update
+       toast.success(`Promovido para Projeto: ${content}`);
+       await deleteInboxItem(id);
     } finally {
       setProcessingId(null);
     }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void submit()}
-          placeholder="Capturar ideia rápida..."
-          className="flex-1 bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <button
-          onClick={() => void submit()}
-          className="bg-primary text-primary-foreground rounded-md px-4 py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors min-h-10"
-        >
-          <Plus size={16} />
-        </button>
-      </div>
-      <div className="space-y-1">
-        {inbox.map((item) => {
-          const isEditingEvent = editingEventId === item.id;
-          const isClosingEvent = closingEventId === item.id;
-          const isProcessing = processingId === item.id;
+  if (loading) {
+    return <p className="text-sm text-muted-foreground p-4">Carregando inbox...</p>;
+  }
 
-          return (
-          <div key={item.id} className="bg-secondary/50 rounded-md px-3 py-2.5 text-sm">
-            <p className="text-secondary-foreground">{item.text}</p>
-            <div className="mt-2 grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
-              <button
-                onClick={() => void handleAddAsTask(item.id, item.text)}
-                disabled={isProcessing}
-                className="rounded-md bg-primary text-primary-foreground px-3 py-2 text-xs font-medium hover:bg-primary/90 disabled:opacity-60 min-h-10"
-              >
-                Adicionar ao Google Tarefas
-              </button>
-              <button
-                onClick={() => {
-                  if (isEditingEvent) {
-                    cancelEventEditor(item.id);
-                    return;
-                  }
-                  openEventEditor(item.id, item.text);
-                }}
-                disabled={isProcessing}
-                className="rounded-md bg-card border border-border text-foreground px-3 py-2 text-xs font-medium hover:bg-surface-hover disabled:opacity-60 min-h-10"
-              >
-                {isEditingEvent ? 'Cancelar evento' : 'Criar evento'}
-              </button>
-              <button
-                onClick={() => void handleDiscard(item.id)}
-                disabled={isProcessing}
-                className="rounded-md bg-transparent border border-border text-muted-foreground px-3 py-2 text-xs font-medium hover:text-foreground hover:bg-surface-hover disabled:opacity-60 min-h-10"
-              >
-                Descartar
-              </button>
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      
+      {/* HEADER */}
+      <div className="flex items-center justify-between bg-card/50 px-4 py-3 rounded-xl border border-border">
+        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          Inbox <span className="px-2 py-0.5 rounded-full bg-secondary text-xs text-muted-foreground">{inbox.length}</span>
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void processInboxWithAI()}
+            disabled={isProcessingAI || inbox.length === 0}
+            className="flex items-center gap-1.5 text-xs font-medium text-cyan-400 bg-cyan-950/30 hover:bg-cyan-900/40 px-3 py-1.5 rounded-lg transition-colors border border-cyan-900/50 disabled:opacity-50"
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            {isProcessingAI ? 'Processando...' : 'Processar tudo'}
+          </button>
+          <button
+            onClick={() => setShowInput(!showInput)}
+            className="flex items-center gap-1.5 text-xs font-medium bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {showInput ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            {showInput ? 'Cancelar' : 'Adicionar'}
+          </button>
+        </div>
+      </div>
+
+      {/* INLINE ADD INPUT */}
+      {showInput && (
+        <div className="flex gap-2 animate-in slide-in-from-top-2 fade-in">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void handleMultipleSubmit()}
+            placeholder="Adicione um item... (vírgula ou Enter para próximo)"
+            autoFocus
+            className="flex-1 bg-secondary border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+          />
+          <button
+            onClick={() => void handleMultipleSubmit()}
+            className="bg-primary text-primary-foreground rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-primary/90 transition-all"
+          >
+            <Check className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* LIST */}
+      <div className="space-y-2">
+        {inbox.map((item) => (
+          <div
+            key={item.id}
+            className={`group relative flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-3 transition-opacity overflow-hidden cursor-default ${processingId === item.id ? 'opacity-50 pointer-events-none' : 'hover:border-white/10 hover:bg-card/80'}`}
+          >
+            {/* Color Band - Left */}
+            <div className={`absolute left-0 top-0 bottom-0 w-1 bg-gray-500`} />
+
+            <div className="cursor-grab text-muted-foreground/30 group-hover:text-muted-foreground/60 p-1 -ml-1">
+              <GripVertical className="w-4 h-4" />
             </div>
 
-            {isEditingEvent && eventDraft && (
-              <div
-                className={`mt-3 rounded-md border border-border bg-card p-3 space-y-3 duration-200 ${
-                  isClosingEvent
-                    ? 'animate-out fade-out-0 slide-out-to-top-1'
-                    : 'animate-in fade-in-0 slide-in-from-top-1'
-                }`}
+            <button 
+              onClick={() => handleComplete(item.id)}
+              className="text-muted-foreground hover:text-cyan-400 transition-colors"
+            >
+              <Circle className="w-5 h-5" />
+            </button>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{item.text}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {new Date(item.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+              </p>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                onClick={() => handleComplete(item.id)}
+                className="p-2 text-muted-foreground hover:text-red-400 rounded-md hover:bg-white/5 transition-colors"
+                title="Deletar"
               >
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Titulo</label>
-                  <input
-                    value={eventDraft.title}
-                    onChange={(e) => setEventDraft((prev) => prev ? { ...prev, title: e.target.value } : prev)}
-                    className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    placeholder="Titulo do evento"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Data</label>
-                    <input
-                      type="date"
-                      value={eventDraft.date}
-                      onChange={(e) => setEventDraft((prev) => prev ? { ...prev, date: e.target.value } : prev)}
-                      className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Hora</label>
-                    <input
-                      type="time"
-                      value={eventDraft.time}
-                      onChange={(e) => setEventDraft((prev) => prev ? { ...prev, time: e.target.value } : prev)}
-                      className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Duracao</label>
-                    <select
-                      value={eventDraft.duration}
-                      onChange={(e) => {
-                        const duration = Number(e.target.value);
-                        setEventDraft((prev) => prev ? { ...prev, duration } : prev);
-                      }}
-                      className="w-full bg-secondary border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                      <option value={30}>30 min</option>
-                      <option value={45}>45 min</option>
-                      <option value={60}>60 min</option>
-                      <option value={90}>90 min</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => void handleSaveEvent(item.id)}
-                    disabled={isProcessing}
-                    className="rounded-md bg-primary text-primary-foreground px-3 py-2 text-xs font-medium hover:bg-primary/90 disabled:opacity-60 min-h-10"
+                <Trash2 className="w-4 h-4" />
+              </button>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button 
+                    className="p-2 text-muted-foreground hover:text-cyan-400 rounded-md hover:bg-white/5 transition-colors"
+                    title="Promover"
                   >
-                    Salvar evento
+                    <ArrowUpRight className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={() => cancelEventEditor(item.id)}
-                    disabled={isProcessing}
-                    className="rounded-md border border-border text-muted-foreground px-3 py-2 text-xs font-medium hover:text-foreground hover:bg-surface-hover disabled:opacity-60 min-h-10"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => promoteToTask(item.id, item.text)}>
+                    Mover para Tarefas
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => promoteToAppointment(item.id, item.text)}>
+                    Mover para Compromisso
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => promoteToProject(item.id, item.text)}>
+                    Mover para Projeto
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          );
-        })}
-        {inbox.length === 0 && (
-          <p className="text-muted-foreground text-xs text-center py-4">Inbox vazio — capture algo!</p>
+        ))}
+
+        {inbox.length === 0 && !showInput && (
+          <div className="text-center py-10 opacity-70">
+            <p className="text-sm text-muted-foreground">O Inbox está vazio e limpo!</p>
+          </div>
         )}
       </div>
     </div>

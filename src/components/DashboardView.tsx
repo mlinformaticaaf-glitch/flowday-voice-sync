@@ -6,6 +6,9 @@ import { CheckCircle2, Clock, AlertTriangle, Flame, FolderKanban } from 'lucide-
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
+import DailyBriefing from './DailyBriefing';
+import EventModal from './EventModal';
+import type { Appointment } from '@/lib/appTypes';
 
 const PRIORITY_ORDER = { alta: 0, media: 1, baixa: 2 };
 const PRIORITY_DOT: Record<string, string> = {
@@ -21,6 +24,7 @@ export default function DashboardView() {
   const habitItems = tasks.filter((task) => task.kind === 'habit');
   const [habitEntries, setHabitEntries] = useState<Array<Tables<'habit_entries'>>>([]);
   const [projects, setProjects] = useState<Array<Tables<'projects'>>>([]);
+  const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const pending = taskItems
@@ -106,12 +110,7 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-6">
-      <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
-        <h1 className="text-xl sm:text-2xl font-bold text-foreground">Bom dia 👋</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
-        </p>
-      </div>
+      <DailyBriefing />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -187,7 +186,8 @@ export default function DashboardView() {
           {upcoming.map((a, index) => (
             <div
               key={a.id}
-              className="flex items-center gap-3 bg-card border border-border rounded-md px-3 py-2 animate-in fade-in-0 slide-in-from-top-1 duration-200"
+              onClick={() => setSelectedEvent(a)}
+              className="flex items-center gap-3 bg-card border border-border rounded-md px-3 py-2 cursor-pointer hover:border-cyan-500/50 hover:bg-card/80 transition-all animate-in fade-in-0 slide-in-from-top-1 duration-200"
               style={{ animationDelay: `${140 + index * 40}ms` }}
             >
               <div className="w-2 h-2 rounded-full bg-primary" />
@@ -215,6 +215,8 @@ export default function DashboardView() {
           ))}
         </div>
       </div>
+      
+      <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
     </div>
   );
 }

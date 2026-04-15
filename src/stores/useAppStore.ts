@@ -23,6 +23,7 @@ import {
   GoogleReconnectRequiredError,
   type GoogleTokenBundle,
   updateGoogleTaskCompletion,
+  updateGoogleCalendarEvent,
 } from '@/lib/googleSync';
 import { GOOGLE_PRODUCTIVITY_SCOPES } from '@/lib/googleOAuth';
 import { defaultDueDateForRecurrence, getNextDueDate, isRecurring } from '@/lib/recurrence';
@@ -76,6 +77,7 @@ interface AppState {
   toggleTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   addAppointment: (appointment: CreateAppointmentInput) => Promise<void>;
+  updateAppointment: (id: string, appointment: Partial<CreateAppointmentInput>) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
   addInboxItem: (text: string, source?: SyncSource) => Promise<void>;
   deleteInboxItem: (id: string) => Promise<void>;
@@ -618,6 +620,50 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
 
     set((state) => ({ appointments: sortAppointments([mapAppointmentRow(nextRow), ...state.appointments]) }));
+  },
+
+  updateAppointment: async (id, appointmentInput) => {
+    const userId = requireUserId(get().userId);
+    const currentAppointment = get().appointments.find((a) => a.id === id);
+    if (!currentAppointment) return;
+
+    let updatePayload: AppointmentUpdate = {
+      title: appointmentInput.title,
+      date: appointmentInput.date,
+      time: appointmentInput.time,
+      duration: appointmentInput.duration,
+      recurrence: appointmentInput.recurrence,
+    };
+    updatePayload = Object.fromEntries(Object.entries(updatePayload).filter(([_, v]) => v !== undefined));
+
+    const { data, error } = await supabase.from('appointments').update(updatePayload).eq('id', id).select('*').single();
+    if (error || !data) throw error ?? new Error('Falha ao atualizar compromisso.');
+
+    let nextRow = data;
+    if (currentAppointment.externalId) {
+      const tokens = await readGoogleTokens(userId);
+      if (tokens?.accessToken) {
+        try {
+          await updateGoogleCalendarEvent(tokens.accessToken, currentAppointment.externalId, appointmentInput);
+        } catch (error) {
+          if (error instanceof GoogleReconnectRequiredError) {
+            set((state) => ({
+              googleConnection: {
+                ...state.googleConnection,
+                connected: false,
+                needsReconnect: true,
+              },
+            }));
+          } else {
+            console.error('Failed to update Google Calendar event', error);
+          }
+        }
+      }
+    }
+
+    set((state) => ({
+      appointments: sortAppointments(state.appointments.map((a) => (a.id === id ? mapAppointmentRow(nextRow) : a))),
+    }));
   },
 
   deleteAppointment: async (id) => {
