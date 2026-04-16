@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <!-- Background rounded square -->
-  <rect width="512" height="512" rx="100" ry="100" fill="#2d3748"/>
+  <rect width="512" height="512" rx="100" ry="100" fill="transparent"/>
 
   <!-- Clock face circle -->
   <circle cx="256" cy="228" r="148" fill="#1a2535" stroke="#3ddba0" stroke-width="4"/>
